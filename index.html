@@ -107,6 +107,14 @@
     function genCode(){return Math.random().toString(36).substring(2,6).toUpperCase();}
     function randInt(min,max){return Math.floor(Math.random()*(max-min+1))+min;}
     function pickRandom(arr){return arr[Math.floor(Math.random()*arr.length)];}
+    function shuffleArray(arr){
+      const a=arr.slice();
+      for(let i=a.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [a[i],a[j]]=[a[j],a[i]];
+      }
+      return a;
+    }
     function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.style.display='none');document.getElementById(id).style.display='flex';}
 
     /* ══════════════════════════════════════
@@ -155,7 +163,9 @@
     ══════════════════════════════════════ */
     async function handlePlay(){
       roomCode=genCode();roomRef=ref(db,'rooms/'+roomCode);
-      await set(roomRef,{mode:selectedMode,totalRounds,currentRound:1,status:'lobby',players:{},game:null,scores:{}});
+      const initialRoom={mode:selectedMode,totalRounds,currentRound:1,status:'lobby',players:{},game:null,scores:{}};
+      await set(roomRef,initialRoom);
+      roomSnapshot=initialRoom;
       showScreen('screen-lobby');
       renderLobby();
       onValue(ref(db,'rooms/'+roomCode+'/players'),snap=>renderLobbyPlayers(snap.val()||{}));
@@ -173,7 +183,7 @@
       document.getElementById('qr-container').innerHTML='';
       new QRCode(document.getElementById('qr-container'),{text:playerUrl,width:180,height:180,colorDark:'#0D0B2B',colorLight:'#FFFFFF',correctLevel:QRCode.CorrectLevel.M});
       document.getElementById('join-url').textContent=playerUrl;
-      document.getElementById('lobby-round-info').textContent=`${totalRounds} round${totalRounds!==1?'s':''} · ${selectedMode} mode`;
+      document.getElementById('lobby-round-info').textContent=`Round ${roomSnapshot?.currentRound||1} of ${totalRounds} · ${selectedMode} mode`;
       document.getElementById('start-game-btn').onclick=()=>{ clearLobbyStartListener(); startNextRound(); };
       document.getElementById('menu-btn').onclick=goToMenu;
 
@@ -283,7 +293,7 @@
 
     async function startDetonatorGame(snap){
       detTurnIndex=0;detProcessing=false;
-      detActivePlayers=getPlayers(snap).map(p=>({...p,eliminated:false}));
+      detActivePlayers=shuffleArray(getPlayers(snap)).map(p=>({...p,eliminated:false}));
       await update(roomRef,{'game/type':'detonator'});
       renderHostGameHeader('💣 Detonator','Survive the bombs — last one standing wins!');
       nextDetonatorTurn();
@@ -715,7 +725,7 @@
       bjProcessing=false;
       bjTurnIndex=0;
       bjDeck=buildShuffledDeck();
-      const activePlayers=getPlayers(snap);
+      const activePlayers=shuffleArray(getPlayers(snap));
       bjPlayers=activePlayers.map(p=>({...p,cards:[bjDeck.pop(),bjDeck.pop()],status:'playing'})); // status: playing|stayed|bust|blackjack|maxcards
 
       const gamePlayers={};
@@ -1134,6 +1144,8 @@
        HOST RENDER HELPERS
     ══════════════════════════════════════ */
     function renderHostGameHeader(title,sub){
+      const badge=document.getElementById('game-round-badge');
+      if(badge&&roomSnapshot) badge.textContent=`Round ${roomSnapshot.currentRound||1} of ${roomSnapshot.totalRounds}`;
       document.getElementById('game-title').textContent=title;
       const label=document.getElementById('turn-label');
       label.classList.remove('stopwatch');
@@ -1192,6 +1204,9 @@
     .title-main span{display:inline-block;animation:wobble 3s ease-in-out infinite;}
     .title-main span:nth-child(1){animation-delay:0s}.title-main span:nth-child(2){animation-delay:.15s}.title-main span:nth-child(3){animation-delay:.3s}.title-main span:nth-child(4){animation-delay:.45s}.title-main span:nth-child(5){animation-delay:.6s}
     @keyframes wobble{0%,100%{transform:translateY(0) rotate(0)}20%{transform:translateY(-8px) rotate(-2deg)}40%{transform:translateY(-4px) rotate(1deg)}}
+    .mini-logo{position:fixed;top:18px;left:20px;z-index:10;font-family:'Fredoka One',cursive;font-size:1.4rem;color:var(--yellow);text-shadow:2px 2px 0 var(--yellow-dark);letter-spacing:.03em;display:flex;align-items:center;gap:6px;pointer-events:none;user-select:none;}
+    .mini-logo .mini-logo-dice{font-size:1.1rem;}
+    @media(max-width:520px){.mini-logo{top:12px;left:14px;font-size:1.1rem;}.mini-logo .mini-logo-dice{font-size:.9rem;}}
     .title-sub{font-size:1rem;color:var(--muted);margin-top:.6rem;font-weight:600;}
     .section{width:100%;max-width:680px;margin-bottom:2rem;}
     .section-label{font-family:'Fredoka One',cursive;font-size:1.1rem;color:var(--cyan);margin-bottom:.9rem;display:flex;align-items:center;gap:.5rem;}
@@ -1248,6 +1263,7 @@
     /* GAME */
     #screen-game{justify-content:flex-start;}
     .game-header{text-align:center;margin-bottom:1.2rem;width:100%;max-width:800px;}
+    .game-round-badge{display:inline-block;font-size:.75rem;font-weight:800;color:var(--cyan);background:rgba(0,229,255,.12);border:1.5px solid rgba(0,229,255,.3);border-radius:99px;padding:4px 14px;letter-spacing:.05em;margin-bottom:.6rem;}
     .game-title-txt{font-family:'Fredoka One',cursive;font-size:2rem;color:var(--yellow);}
     .turn-label{font-size:1rem;font-weight:700;color:var(--white);margin-top:.4rem;min-height:1.6em;}
     .turn-label.stopwatch{font-family:'Fredoka One',cursive;font-size:2.2rem;color:var(--yellow);letter-spacing:.04em;}
@@ -1387,6 +1403,7 @@
 
 <!-- LOBBY -->
 <div class="screen" id="screen-lobby">
+  <div class="mini-logo"><span class="mini-logo-dice">🎲</span>BORED</div>
   <div class="lobby-header">
     <p style="font-size:.85rem;font-weight:800;color:var(--cyan);letter-spacing:.2em;text-transform:uppercase;margin-bottom:.4rem">Room code</p>
     <div class="lobby-code" id="room-code-display">——</div>
@@ -1413,7 +1430,9 @@
 
 <!-- GAME -->
 <div class="screen" id="screen-game">
+  <div class="mini-logo"><span class="mini-logo-dice">🎲</span>BORED</div>
   <div class="game-header">
+    <div class="game-round-badge" id="game-round-badge"></div>
     <div class="game-title-txt" id="game-title">Loading…</div>
     <div class="turn-label" id="turn-label"></div>
   </div>
