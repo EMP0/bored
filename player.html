@@ -129,7 +129,7 @@
       if(!me) return;
 
       if(room.status==='lobby'){
-        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; lastGameType=null; lastPhase=null;
+        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; snakeProcessingP=false; lastGameType=null; lastPhase=null;
         stopCloser5CountdownLoop();
         showScreen('screen-lobby');
         document.getElementById('lobby-round-info').textContent =
@@ -181,6 +181,7 @@
     else if(game.type==='closer5') renderCloser5Game(room, me, game);
     else if(game.type==='blackjack21') renderBlackjackGame(room, me, game);
     else if(game.type==='guessflag') renderGuessFlagGame(room, me, game);
+    else if(game.type==='snakepick') renderSnakePickGame(room, me, game);
   }
 
   /* ══════════════════════════════════════
@@ -505,6 +506,62 @@
   }
 
   /* ══════════════════════════════════════
+     SNAKE PICK (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let snakeProcessingP = false;
+
+  function renderSnakePickGame(room, me, game){
+    document.getElementById('game-icon').textContent = '🐍';
+    const isMyTurn = game.currentPlayerKey === myPlayerKey;
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+    const snakes = game.snakes||[];
+
+    if(game.phase==='revealed'){
+      const myEntry = snakes.find(s=>s.pickedBy===myPlayerKey);
+      const minValue = Math.min(...snakes.filter(s=>s.value!=null).map(s=>s.value));
+      const iLost = myEntry && myEntry.value===minValue;
+      turnEl.textContent = iLost ? '🐍 Your snake was the shortest!' : '🐍 Snakes revealed!';
+      subEl.textContent = iLost ? "You're out this round…" : 'Check the host screen for the lineup';
+      area.innerHTML = `<div class="big-result">${iLost?'😬':'🐍'}</div>`;
+      snakeProcessingP = false;
+      return;
+    }
+
+    if(isMyTurn){
+      turnEl.textContent = '🐍 Your turn!';
+      subEl.textContent = 'Pick a snake — you won\'t know the length until everyone\'s chosen.';
+    } else {
+      turnEl.textContent = `${game.currentPlayerName}'s turn`;
+      subEl.textContent = 'Waiting for them to pick…';
+    }
+
+    area.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'snake-pick-area';
+    snakes.forEach((s,i)=>{
+      const btn = document.createElement('button');
+      const interactive = isMyTurn && game.phase==='picking' && !s.pickedBy;
+      btn.className = 'snake-pick-btn'+(interactive?' active':'')+(s.pickedBy?' taken':'');
+      btn.disabled = !interactive;
+      btn.innerHTML = s.pickedBy ? `<span class="snake-pick-emoji">🐍</span><span class="snake-pick-lock">🔒</span>` : `<span class="snake-pick-emoji">🐍</span><span class="snake-pick-q">?</span>`;
+      if(interactive) btn.onclick = ()=>pickSnake(i, snakes);
+      grid.appendChild(btn);
+    });
+    area.appendChild(grid);
+  }
+
+  async function pickSnake(index, snakes){
+    if(snakeProcessingP) return;
+    snakeProcessingP = true;
+    document.querySelectorAll('.snake-pick-btn').forEach(b=>b.disabled=true);
+    const updated = snakes.map((s,i)=> i===index ? {...s, pickedBy: myPlayerKey} : s);
+    await update(ref(db,`rooms/${roomCode}/game`), {snakes: updated});
+    setTimeout(()=>{snakeProcessingP=false;}, 1500);
+  }
+
+  /* ══════════════════════════════════════
      SCOREBOARD (between rounds + final)
   ══════════════════════════════════════ */
   function renderScoreboard(room, isFinal){
@@ -603,8 +660,8 @@
   .game-icon{font-size:2.4rem;margin-bottom:.5rem;}
   .game-turn{font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--white);margin-bottom:.3rem;}
   .game-sub{font-size:.88rem;color:var(--muted);font-weight:700;margin-bottom:2rem;}
-  .detonator-area{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:340px;}
-  .det-btn{aspect-ratio:1;border-radius:16px;border:3px solid rgba(255,255,255,.12);background:var(--card-bg);color:var(--white);font-family:'Fredoka One',cursive;font-size:1.5rem;cursor:default;user-select:none;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s,border-color .15s;width:100%;}
+  .detonator-area{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:420px;}
+  .det-btn{aspect-ratio:1;border-radius:18px;border:3px solid rgba(255,255,255,.12);background:var(--card-bg);color:var(--white);font-family:'Fredoka One',cursive;font-size:2.4rem;cursor:default;user-select:none;display:flex;align-items:center;justify-content:center;transition:transform .12s,background .15s,border-color .15s;width:100%;}
   .det-btn.colored{border-color:var(--det-color);background:color-mix(in srgb,var(--det-color) 16%,var(--card-bg));}
   .det-btn.active{cursor:pointer;border-color:rgba(255,215,64,.4);background:#21205a;}
   .det-btn.active.colored{border-color:var(--det-color);background:color-mix(in srgb,var(--det-color) 22%,#21205a);}
@@ -668,6 +725,17 @@
   .flag-opt-btn:active{transform:translateY(1px);}
   .flag-opt-btn:disabled{opacity:.4;cursor:default;transform:none;}
   .flag-result-msg{font-size:1.1rem;font-weight:800;color:var(--yellow);}
+  /* Snake Pick */
+  .snake-pick-area{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:340px;}
+  .snake-pick-btn{aspect-ratio:1;border-radius:16px;border:3px solid rgba(255,255,255,.12);background:var(--card-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:default;transition:transform .12s,border-color .15s,background .15s;}
+  .snake-pick-btn.active{cursor:pointer;border-color:rgba(255,215,64,.4);background:#21205a;}
+  .snake-pick-btn.active:hover{transform:scale(1.05);border-color:var(--yellow);background:#2e2c78;}
+  .snake-pick-btn.active:active{transform:scale(.93);}
+  .snake-pick-btn.taken{opacity:.5;border-color:rgba(255,255,255,.08);}
+  .snake-pick-btn:disabled{cursor:default;}
+  .snake-pick-emoji{font-size:1.7rem;}
+  .snake-pick-q{font-weight:800;color:var(--muted);font-size:1.1rem;}
+  .snake-pick-lock{font-size:1rem;}
   .final-headline{font-family:'Fredoka One',cursive;font-size:1.8rem;color:var(--yellow);margin-bottom:1.5rem;}
   .waiting-note{font-size:.82rem;color:var(--muted);font-weight:700;margin-top:1.5rem;}
 

@@ -49,7 +49,7 @@
     const MIN_ROUNDS = 1, MAX_ROUNDS = 12;
     const AVATARS      = ['🦊','🦉','🐸','🐯','🐧','🦄','🐉','🐻'];
     const AVATAR_COLORS= ['#FF5252','#7C4DFF','#00BFA5','#FF6D00','#0091EA','#F50057','#1DE9B6','#FFD600'];
-    const GAMES        = ['detonator','rocket','closer5','blackjack21','guessflag'];
+    const GAMES        = ['detonator','rocket','closer5','blackjack21','guessflag','snakepick'];
 
     const FLAG_COUNTRIES = [
       {code:'us',name:'United States'},{code:'ca',name:'Canada'},{code:'mx',name:'Mexico'},{code:'br',name:'Brazil'},
@@ -262,7 +262,8 @@
         else if(gameType==='rocket') startRocketGame(roomSnapshot);
         else if(gameType==='closer5') startCloser5Game(roomSnapshot);
         else if(gameType==='blackjack21') startBlackjackGame(roomSnapshot);
-        else startGuessFlagGame(roomSnapshot);
+        else if(gameType==='guessflag') startGuessFlagGame(roomSnapshot);
+        else startSnakePickGame(roomSnapshot);
 
         showScreen('screen-game');
       } finally {
@@ -1048,6 +1049,131 @@
       setTimeout(()=>{ showRoundScoreboard(msg); },2600);
     }
 
+    /* ══════════════════════════════════════
+       GAME: SNAKE PICK
+    ══════════════════════════════════════ */
+    let snakeActivePlayers=[];
+    let snakePickOrder=[];
+    let snakePickIndex=0;
+    let snakeProcessing=false;
+    let snakePool=[];
+
+    function buildSnakePool(count){
+      const values=Array.from({length:count},(_,i)=>i+1);
+      return shuffleArray(values).map((v,i)=>({index:i,value:v,pickedBy:null}));
+    }
+
+    async function startSnakePickGame(snap){
+      snakeProcessing=false;
+      snakeActivePlayers=shuffleArray(getPlayers(snap)).map(p=>({...p,eliminated:false}));
+      await update(roomRef,{'game/type':'snakepick'});
+      renderHostGameHeader('🐍 Snake Pick','Pick a snake — the shortest one goes home!');
+      startSnakeSubRound();
+      listenSnakePicks();
+    }
+
+    function startSnakeSubRound(){
+      const alive=snakeActivePlayers.filter(p=>!p.eliminated);
+      if(alive.length<=1){ finishSnakePickGame(alive[0]||null); return; }
+      snakePickOrder=shuffleArray(alive);
+      snakePickIndex=0;
+      snakePool=buildSnakePool(alive.length);
+      pushSnakeState('picking');
+    }
+
+    function pushSnakeState(phase,extra={}){
+      const current=snakePickOrder[snakePickIndex%snakePickOrder.length];
+      update(roomRef,{game:{
+        type:'snakepick',
+        phase,
+        snakes:snakePool.map(s=>({index:s.index,value:phase==='picking'?null:s.value,pickedBy:s.pickedBy})),
+        currentPlayerKey:current?current.key:null,
+        currentPlayerName:current?current.name:null,
+        ...extra
+      }});
+      renderSnakeHostView(phase,current);
+    }
+
+    function renderSnakeHostView(phase,current){
+      const area=document.getElementById('game-area');area.innerHTML='';
+      const wrap=document.createElement('div');wrap.className='snake-grid';
+      snakePool.forEach((s,i)=>{
+        const taken=s.pickedBy!==null;
+        const tile=document.createElement('div');
+        tile.className='snake-tile'+(taken?' taken':'')+(phase==='revealed'?' revealed':'');
+        const ownerName=taken?(snakeActivePlayers.find(p=>p.key===s.pickedBy)?.name||''):'';
+        tile.innerHTML=phase==='revealed'
+          ? `<span class="snake-emoji">🐍</span><span class="snake-len" style="width:${20+s.value*12}px"></span><span class="snake-val">${s.value}</span>${ownerName?`<span class="snake-owner">${esc(ownerName)}</span>`:''}`
+          : `<span class="snake-emoji">🐍</span><span class="snake-qmark">${taken?'🔒':'?'}</span>${ownerName?`<span class="snake-owner">${esc(ownerName)}</span>`:''}`;
+        wrap.appendChild(tile);
+      });
+      area.appendChild(wrap);
+      document.getElementById('turn-label').textContent = phase==='picking'
+        ? `${current?current.name:''}'s turn — pick a snake`
+        : phase==='revealed' ? 'Revealing snake lengths…' : '';
+      renderHostPlayerStatus(snakeActivePlayers);
+    }
+
+    function listenSnakePicks(){
+      attachGameListener('rooms/'+roomCode+'/game/snakes',snap=>{
+        const snakes=snap.val();
+        if(!snakes||snakeProcessing)return;
+        // Sync host-side pool with any new pick written by a player
+        let changed=false;
+        snakes.forEach(s=>{
+          const local=snakePool[s.index];
+          if(local&&s.pickedBy&&!local.pickedBy){ local.pickedBy=s.pickedBy; changed=true; }
+        });
+        if(!changed)return;
+        advanceSnakeTurn();
+      });
+    }
+
+    function advanceSnakeTurn(){
+      const allPicked=snakePool.every(s=>s.pickedBy!==null);
+      if(allPicked){
+        snakeProcessing=true;
+        revealSnakesAndEliminate();
+        return;
+      }
+      snakePickIndex++;
+      pushSnakeState('picking');
+    }
+
+    async function revealSnakesAndEliminate(){
+      const roomAtStart=roomCode;
+      if(gameListener) detachGameListener();
+      pushSnakeState('revealed');
+
+      const minValue=Math.min(...snakePool.map(s=>s.value));
+      const losers=snakePool.filter(s=>s.value===minValue).map(s=>s.pickedBy);
+      losers.forEach(key=>{
+        const p=snakeActivePlayers.find(pl=>pl.key===key);
+        if(p) p.eliminated=true;
+      });
+
+      await new Promise(r=>setTimeout(r,2800));
+      if(roomCode!==roomAtStart)return; // host left this room while the reveal was playing out
+
+      const alive=snakeActivePlayers.filter(p=>!p.eliminated);
+      if(alive.length<=1){
+        finishSnakePickGame(alive[0]||null);
+      } else {
+        snakeProcessing=false;
+        startSnakeSubRound();
+        listenSnakePicks();
+      }
+    }
+
+    async function finishSnakePickGame(winner){
+      detachGameListener();
+      const scoreUpdates={};
+      if(winner) scoreUpdates[`players/${winner.key}/score`]=(roomSnapshot.players[winner.key].score||0)+1;
+      if(Object.keys(scoreUpdates).length) await update(roomRef,scoreUpdates);
+      const snap=await get(roomRef);roomSnapshot=snap.val();
+      showRoundScoreboard(winner?`🐍 ${winner.avatar} ${winner.name} had the longest snake!`:'🐍 Everyone got eliminated!');
+    }
+
     let sbNextRoundListener=null;
 
     async function showRoundScoreboard(resultMsg){
@@ -1328,6 +1454,16 @@
     .flag-tile{background:var(--card-bg);border:2px solid rgba(255,255,255,.1);border-radius:14px;padding:.75rem .6rem;text-align:center;transition:border-color .3s,background .3s;}
     .flag-tile.correct{border-color:rgba(0,230,118,.5);background:color-mix(in srgb,#00E676 10%,var(--card-bg));}
     .flag-tile.wrong{border-color:rgba(255,82,82,.35);background:color-mix(in srgb,#FF5252 6%,var(--card-bg));opacity:.75;}
+    /* Snake Pick */
+    .snake-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px;margin-bottom:1rem;}
+    .snake-tile{background:var(--card-bg);border:2px solid rgba(255,255,255,.12);border-radius:14px;padding:1rem .6rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;transition:border-color .3s,background .3s;}
+    .snake-tile.taken{border-color:rgba(255,215,64,.35);background:color-mix(in srgb,#FFD740 6%,var(--card-bg));}
+    .snake-tile.revealed{border-color:rgba(0,229,255,.4);}
+    .snake-emoji{font-size:1.8rem;}
+    .snake-qmark{font-size:1.3rem;font-weight:800;color:var(--muted);}
+    .snake-len{display:block;height:8px;background:linear-gradient(90deg,#00BFA5,#1DE9B6);border-radius:99px;transition:width .6s ease;}
+    .snake-val{font-family:'Fredoka One',cursive;font-size:1.2rem;color:var(--yellow);}
+    .snake-owner{font-size:.72rem;font-weight:800;color:var(--cyan);}
     .rocket-tile{background:var(--card-bg);border:2px solid rgba(255,255,255,.1);border-radius:14px;padding:.9rem .75rem;text-align:center;transition:border-color .3s,opacity .3s;}
     .rocket-tile.on-board{border-color:rgba(0,230,118,.4);}
     .rocket-tile.ejected-tile{opacity:.4;border-color:rgba(255,255,255,.08);}
