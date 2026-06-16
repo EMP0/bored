@@ -232,6 +232,7 @@
     }
 
     let startingRound=false;
+    let roundToken=0; // bumped every time a new round starts; stale callbacks check this before acting
 
     let playedGamesThisMatch=[];
 
@@ -266,6 +267,7 @@
         // Clean up any previous game listener/timer
         clearAllGameTimers();
         detachGameListener();
+        roundToken++; // invalidate any stale setTimeout callbacks still pending from the previous round
 
         const snap=await get(roomRef);
         roomSnapshot=snap.val();
@@ -343,21 +345,31 @@
     async function resolveDetonatorPick(pressed,dets){
       const alive=detActivePlayers.filter(p=>!p.eliminated);
       const current=alive[detTurnIndex%alive.length];
+      const tokenAtSchedule=roundToken;
       if(pressed.isBomb){
         current.eliminated=true;
         await update(roomRef,{'game/phase':'exploded','game/result':'eliminated'});
         renderHostDetonator(dets,current,null,'exploded');
         document.getElementById('turn-label').textContent=`💥 ${current.name} hit the bomb!`;
         const stillAlive=detActivePlayers.filter(p=>!p.eliminated);
-        if(stillAlive.length<=1){setTimeout(()=>finishDetonatorGame(stillAlive[0]||null),2200);return;}
+        if(stillAlive.length<=1){
+          setTimeout(()=>{ if(roundToken===tokenAtSchedule) finishDetonatorGame(stillAlive[0]||null); },2200);
+          return;
+        }
         // don't advance turn index since current is eliminated; next alive player takes their spot
-        setTimeout(()=>{detProcessing=false;nextDetonatorTurn();},2200);
+        setTimeout(()=>{
+          if(roundToken!==tokenAtSchedule)return;
+          detProcessing=false;nextDetonatorTurn();
+        },2200);
       } else {
         await update(roomRef,{'game/phase':'safe','game/result':'safe'});
         renderHostDetonator(dets,current,null,'safe');
         document.getElementById('turn-label').textContent=`✅ ${current.name} is safe! Next player…`;
         detTurnIndex++;
-        setTimeout(()=>{detProcessing=false;nextDetonatorTurn();},1800);
+        setTimeout(()=>{
+          if(roundToken!==tokenAtSchedule)return;
+          detProcessing=false;nextDetonatorTurn();
+        },1800);
       }
     }
 
@@ -592,16 +604,18 @@
       const area=document.getElementById('game-area');
       const steps=['3','2','1','GO!'];
       let i=0;
+      const tokenAtSchedule=roundToken;
       const renderStep=()=>{
         area.innerHTML=`<div class="closer5-countdown">${steps[i]}</div>`;
       };
       const tick=()=>{
+        if(roundToken!==tokenAtSchedule)return;
         renderStep();
         i++;
         if(i<steps.length){
           setTimeout(tick,700);
         } else {
-          setTimeout(beginCloser5Timer,500);
+          setTimeout(()=>{ if(roundToken===tokenAtSchedule) beginCloser5Timer(); },500);
         }
       };
       tick();
@@ -816,7 +830,9 @@
       await syncBlackjackPlayerState(p);
       renderBlackjackTable();
 
+      const tokenAtSchedule=roundToken;
       setTimeout(()=>{
+        if(roundToken!==tokenAtSchedule)return; // a new round started — this callback is stale, do nothing
         bjProcessing=false;
         if(p.status==='playing'){
           // still their turn, wait for next action — just re-render, don't advance
@@ -834,7 +850,9 @@
       p.status='stayed';
       await syncBlackjackPlayerState(p);
       renderBlackjackTable();
+      const tokenAtSchedule=roundToken;
       setTimeout(()=>{
+        if(roundToken!==tokenAtSchedule)return; // a new round started — this callback is stale, do nothing
         bjProcessing=false;
         bjTurnIndex=(bjTurnIndex+1)%bjPlayers.length;
         advanceToNextBlackjackTurn();
