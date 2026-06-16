@@ -27,6 +27,7 @@
     ══════════════════════════════════════ */
     let roomCode = null, roomRef = null;
     let selectedMode = null, totalRounds = 5;
+    let forceNextGame = new URLSearchParams(location.search).get('forcegame');
     let roomSnapshot = null;
     let rocketTimer = null;
     let gameListener = null;
@@ -163,6 +164,7 @@
     ══════════════════════════════════════ */
     async function handlePlay(){
       roomCode=genCode();roomRef=ref(db,'rooms/'+roomCode);
+      playedGamesThisMatch=[];
       const initialRoom={mode:selectedMode,totalRounds,currentRound:1,status:'lobby',players:{},game:null,scores:{}};
       await set(roomRef,initialRoom);
       roomSnapshot=initialRoom;
@@ -231,6 +233,24 @@
 
     let startingRound=false;
 
+    let playedGamesThisMatch=[];
+
+    function pickNextGameType(){
+      if(forceNextGame&&GAMES.includes(forceNextGame)){
+        const forced=forceNextGame;
+        forceNextGame=null; // one-shot — only forces the very next round
+        if(!playedGamesThisMatch.includes(forced)) playedGamesThisMatch.push(forced);
+        if(playedGamesThisMatch.length>=GAMES.length) playedGamesThisMatch=[];
+        return forced;
+      }
+      const remaining=GAMES.filter(g=>!playedGamesThisMatch.includes(g));
+      const pool=remaining.length?remaining:GAMES; // all games used up — reset the cycle
+      const choice=pickRandom(pool);
+      playedGamesThisMatch.push(choice);
+      if(playedGamesThisMatch.length>=GAMES.length) playedGamesThisMatch=[]; // full cycle complete, ready to reshuffle next pick
+      return choice;
+    }
+
     async function startNextRound(){
       if(startingRound)return;
       startingRound=true;
@@ -249,12 +269,8 @@
 
         const snap=await get(roomRef);
         roomSnapshot=snap.val();
-        if(roomSnapshot.status==='playing'){
-          // A round is already live in the database — don't start a second one on top of it
-          return;
-        }
         const round=roomSnapshot.currentRound||1;
-        const gameType=pickRandom(GAMES);
+        const gameType=pickNextGameType();
 
         await update(roomRef,{status:'playing',game:null});
 
@@ -1256,6 +1272,7 @@
 
       document.getElementById('final-again-btn').onclick=async()=>{
         // Reset scores and round, go back to lobby
+        playedGamesThisMatch=[];
         const updates={currentRound:1,status:'lobby',game:null};
         const players2=roomSnapshot.players||{};
         Object.keys(players2).forEach(k=>{updates[`players/${k}/score`]=0;});
@@ -1295,6 +1312,7 @@
       detachGameListener();
       clearLobbyStartListener();
       clearSbNextRoundListener();
+      playedGamesThisMatch=[];
       if(roomRef) await remove(roomRef).catch(()=>{});
       roomCode=null;roomRef=null;roomSnapshot=null;
       selectedMode=null;
