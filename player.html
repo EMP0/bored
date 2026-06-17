@@ -129,7 +129,7 @@
       if(!me) return;
 
       if(room.status==='lobby'){
-        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; snakeProcessingP=false; lastGameType=null; lastPhase=null;
+        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; snakeProcessingP=false; logoGuessSent=false; hlGuessSent=false; lastGameType=null; lastPhase=null;
         stopCloser5CountdownLoop();
         showScreen('screen-lobby');
         document.getElementById('lobby-round-info').textContent =
@@ -182,6 +182,8 @@
     else if(game.type==='blackjack21') renderBlackjackGame(room, me, game);
     else if(game.type==='guessflag') renderGuessFlagGame(room, me, game);
     else if(game.type==='snakepick') renderSnakePickGame(room, me, game);
+    else if(game.type==='logoquiz') renderLogoQuizGame(room, me, game);
+    else if(game.type==='higherlower') renderHigherLowerGame(room, me, game);
   }
 
   /* ══════════════════════════════════════
@@ -506,6 +508,157 @@
   }
 
   /* ══════════════════════════════════════
+     LOGO QUIZ (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let logoGuessSent = false;
+
+  function logoCardHtml(b, pct){
+    const longName = b.name.length>10;
+    const fontFamily = b.font==='cursive' ? "'Brush Script MT',cursive" : b.font==='serif' ? "'Georgia',serif" : "'Nunito',sans-serif";
+    return `
+      <div class="flag-frame-p logo-frame-p" style="background:${b.bg}">
+        <div class="logo-card-inner-p" style="clip-path:inset(0 ${100-pct}% 0 0)">
+          <span class="logo-card-text-p${longName?' logo-card-text-p-sm':''}" style="color:${b.fg};font-family:${fontFamily};font-weight:${b.weight};font-style:${b.style}">${esc(b.name)}</span>
+        </div>
+      </div>`;
+  }
+
+  function renderLogoQuizGame(room, me, game){
+    document.getElementById('game-icon').textContent = '🏷️';
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+    const b = game.brand||{};
+
+    const myGuess = game.guesses?.[myPlayerKey];
+
+    if(game.phase==='revealed'){
+      const won = game.winnerKey===myPlayerKey;
+      turnEl.textContent = won ? '🎉 You got it!' : (game.winnerKey ? 'Round over!' : "Time's up!");
+      subEl.textContent = `It was ${b.name}`;
+      area.innerHTML = `
+        ${logoCardHtml(b, 100)}
+        <div class="flag-result-msg">${won?'+1 point! 🏆':(myGuess&&!myGuess.correct?'❌ Not this time':'')}</div>`;
+      return;
+    }
+
+    logoGuessSent = !!myGuess;
+    const pct = game.revealPct||20;
+
+    if(myGuess){
+      turnEl.textContent = myGuess.correct ? '✅ Nice eye!' : '🔒 Guess locked in';
+      subEl.textContent = myGuess.correct ? 'Waiting for the round to finish…' : 'Watch and see who gets it!';
+      area.innerHTML = logoCardHtml(b, pct);
+      return;
+    }
+
+    turnEl.textContent = '🏷️ Which brand is this?';
+    subEl.textContent = 'The logo reveals more every few seconds!';
+    const optsHtml = (game.options||[]).map(name=>
+      `<button class="flag-opt-btn" data-name="${esc(name)}">${esc(name)}</button>`
+    ).join('');
+    area.innerHTML = `
+      ${logoCardHtml(b, pct)}
+      <div class="flag-options-grid">${optsHtml}</div>`;
+    area.querySelectorAll('.flag-opt-btn').forEach(btn=>{
+      btn.onclick = ()=>submitLogoGuess(btn.dataset.name, b.name);
+    });
+  }
+
+  async function submitLogoGuess(guessName, correctName){
+    if(logoGuessSent) return;
+    logoGuessSent = true;
+    document.querySelectorAll('.flag-opt-btn').forEach(b=>b.disabled=true);
+    const correct = guessName===correctName;
+    await update(ref(db,`rooms/${roomCode}/game/guesses/${myPlayerKey}`), {correct, guess: guessName, at: Date.now()});
+  }
+
+  /* ══════════════════════════════════════
+     HIGHER OR LOWER (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let hlGuessSent = false;
+
+  function hlCardHtml(item, showScore){
+    return `
+      <div class="hl-card-p">
+        <span class="hl-emoji-p">${item.emoji}</span>
+        <span class="hl-label-p">${esc(item.label)}</span>
+        ${showScore?`<span class="hl-score-p">${item.score}</span>`:''}
+      </div>`;
+  }
+
+  function renderHigherLowerGame(room, me, game){
+    document.getElementById('game-icon').textContent = '📊';
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+
+    const eliminatedKeys = game.eliminatedKeys||[];
+    const iAmEliminated = eliminatedKeys.includes(myPlayerKey);
+
+    if(iAmEliminated){
+      turnEl.textContent = '📊 You\'re out!';
+      subEl.textContent = 'Watch and see who calls it the longest…';
+      area.innerHTML = `<div class="big-result">😬</div>`;
+      return;
+    }
+
+    const myGuess = game.guesses?.[myPlayerKey];
+
+    if(game.phase==='revealed'){
+      const bHigher = game.itemB.score>game.itemA.score;
+      const correct = myGuess===(bHigher?'higher':'lower');
+      turnEl.textContent = correct ? '✅ Nailed it!' : '❌ Not quite!';
+      subEl.textContent = `${game.itemB.label} was ${bHigher?'HIGHER':'LOWER'} than ${game.itemA.label}`;
+      area.innerHTML = `
+        <div class="hl-wrap-p">
+          ${hlCardHtml(game.itemA, true)}
+          <div class="hl-vs-p">VS</div>
+          ${hlCardHtml(game.itemB, true)}
+        </div>`;
+      hlGuessSent = false;
+      return;
+    }
+
+    hlGuessSent = !!myGuess;
+
+    if(myGuess){
+      turnEl.textContent = '🔒 Locked in!';
+      subEl.textContent = 'Waiting for everyone else…';
+      area.innerHTML = `
+        <div class="hl-wrap-p">
+          ${hlCardHtml(game.itemA, false)}
+          <div class="hl-vs-p">VS</div>
+          ${hlCardHtml(game.itemB, false)}
+        </div>`;
+      return;
+    }
+
+    turnEl.textContent = '📊 Higher or lower?';
+    subEl.textContent = `Is "${game.itemB.label}" searched more or less than "${game.itemA.label}"?`;
+    area.innerHTML = `
+      <div class="hl-wrap-p">
+        ${hlCardHtml(game.itemA, false)}
+        <div class="hl-vs-p">VS</div>
+        ${hlCardHtml(game.itemB, false)}
+      </div>
+      <div class="hl-action-row">
+        <button class="hl-lower-btn" id="hl-lower-btn">⬇️ Lower</button>
+        <button class="hl-higher-btn" id="hl-higher-btn">⬆️ Higher</button>
+      </div>`;
+    document.getElementById('hl-higher-btn').onclick = ()=>submitHLGuess('higher');
+    document.getElementById('hl-lower-btn').onclick = ()=>submitHLGuess('lower');
+  }
+
+  async function submitHLGuess(guess){
+    if(hlGuessSent) return;
+    hlGuessSent = true;
+    document.getElementById('hl-higher-btn')?.setAttribute('disabled','true');
+    document.getElementById('hl-lower-btn')?.setAttribute('disabled','true');
+    await update(ref(db,`rooms/${roomCode}/game/guesses/${myPlayerKey}`), guess);
+  }
+
+  /* ══════════════════════════════════════
      SNAKE PICK (PLAYER VIEW)
   ══════════════════════════════════════ */
   let snakeProcessingP = false;
@@ -725,6 +878,27 @@
   .flag-opt-btn:active{transform:translateY(1px);}
   .flag-opt-btn:disabled{opacity:.4;cursor:default;transform:none;}
   .flag-result-msg{font-size:1.1rem;font-weight:800;color:var(--yellow);}
+  /* Logo Quiz */
+  .logo-frame-p{display:flex;align-items:center;justify-content:center;position:relative;}
+  .logo-card-inner-p{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:clip-path .5s ease;}
+  .logo-card-text-p{font-size:1.3rem;letter-spacing:.02em;text-align:center;padding:0 .8rem;white-space:nowrap;}
+  .logo-card-text-p-sm{font-size:.95rem;}
+  /* Higher or Lower */
+  .hl-wrap-p{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;max-width:360px;margin-bottom:1.4rem;}
+  .hl-card-p{background:var(--card-bg);border:2px solid rgba(255,255,255,.15);border-radius:16px;padding:1rem .6rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;flex:1;min-width:0;}
+  .hl-emoji-p{font-size:2.2rem;}
+  .hl-label-p{font-family:'Fredoka One',cursive;font-size:.85rem;color:var(--white);text-align:center;}
+  .hl-score-p{font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--yellow);}
+  .hl-vs-p{font-family:'Fredoka One',cursive;font-size:1.1rem;color:var(--coral);flex-shrink:0;}
+  .hl-action-row{display:flex;gap:14px;width:100%;max-width:360px;}
+  .hl-higher-btn,.hl-lower-btn{flex:1;padding:1rem .5rem;border-radius:14px;border:none;font-family:'Fredoka One',cursive;font-size:1.1rem;cursor:pointer;transition:transform .12s,box-shadow .12s;}
+  .hl-higher-btn{background:var(--green);color:#053b1f;box-shadow:0 5px 0 #00a85a;}
+  .hl-higher-btn:hover{transform:translateY(-2px);box-shadow:0 7px 0 #00a85a;}
+  .hl-higher-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #00a85a;}
+  .hl-lower-btn{background:var(--coral);color:#3a0a0a;box-shadow:0 5px 0 #c23a3a;}
+  .hl-lower-btn:hover{transform:translateY(-2px);box-shadow:0 7px 0 #c23a3a;}
+  .hl-lower-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #c23a3a;}
+  .hl-higher-btn:disabled,.hl-lower-btn:disabled{opacity:.4;cursor:default;transform:none;}
   /* Snake Pick */
   .snake-pick-area{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:340px;}
   .snake-pick-btn{aspect-ratio:1;border-radius:16px;border:3px solid rgba(255,255,255,.12);background:var(--card-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:default;transition:transform .12s,border-color .15s,background .15s;}

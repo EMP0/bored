@@ -50,7 +50,7 @@
     const MIN_ROUNDS = 1, MAX_ROUNDS = 12;
     const AVATARS      = ['🦊','🦉','🐸','🐯','🐧','🦄','🐉','🐻'];
     const AVATAR_COLORS= ['#FF5252','#7C4DFF','#00BFA5','#FF6D00','#0091EA','#F50057','#1DE9B6','#FFD600'];
-    const GAMES        = ['detonator','rocket','closer5','blackjack21','guessflag','snakepick'];
+    const GAMES        = ['detonator','rocket','closer5','blackjack21','guessflag','snakepick','logoquiz','higherlower'];
 
     const FLAG_COUNTRIES = [
       {code:'us',name:'United States'},{code:'ca',name:'Canada'},{code:'mx',name:'Mexico'},{code:'br',name:'Brazil'},
@@ -99,6 +99,122 @@
       {code:'sb',name:'Solomon Islands'},{code:'vu',name:'Vanuatu'},{code:'ws',name:'Samoa'},{code:'to',name:'Tonga'},
       {code:'ki',name:'Kiribati'},{code:'fm',name:'Micronesia'},{code:'mh',name:'Marshall Islands'},{code:'pw',name:'Palau'},
       {code:'nr',name:'Nauru'},{code:'tv',name:'Tuvalu'}
+    ];
+
+    // Stylized brand-name cards: each brand rendered in its signature color palette and font feel.
+    // No logo marks are reproduced — this is a styled text card, not the company's actual logo artwork.
+    const BRAND_CARDS = [
+      {name:'Coca-Cola',bg:'#E61A2B',fg:'#FFFFFF',font:'cursive',weight:400,style:'italic'},
+      {name:'McDonald\'s',bg:'#DA291C',fg:'#FFC72C',font:'sans',weight:800,style:'normal'},
+      {name:'Nike',bg:'#111111',fg:'#FFFFFF',font:'sans',weight:800,style:'italic'},
+      {name:'Adidas',bg:'#FFFFFF',fg:'#000000',font:'sans',weight:800,style:'normal'},
+      {name:'Apple',bg:'#000000',fg:'#FFFFFF',font:'sans',weight:600,style:'normal'},
+      {name:'Google',bg:'#FFFFFF',fg:'#4285F4',font:'sans',weight:700,style:'normal'},
+      {name:'Amazon',bg:'#232F3E',fg:'#FF9900',font:'sans',weight:700,style:'normal'},
+      {name:'Netflix',bg:'#000000',fg:'#E50914',font:'sans',weight:800,style:'normal'},
+      {name:'Spotify',bg:'#000000',fg:'#1DB954',font:'sans',weight:800,style:'normal'},
+      {name:'Starbucks',bg:'#00704A',fg:'#FFFFFF',font:'sans',weight:700,style:'normal'},
+      {name:'Pepsi',bg:'#004B93',fg:'#FFFFFF',font:'sans',weight:800,style:'italic'},
+      {name:'Samsung',bg:'#FFFFFF',fg:'#1428A0',font:'sans',weight:700,style:'italic'},
+      {name:'Sony',bg:'#000000',fg:'#FFFFFF',font:'sans',weight:600,style:'normal'},
+      {name:'LEGO',bg:'#D01012',fg:'#FFD500',font:'sans',weight:900,style:'normal'},
+      {name:'Disney',bg:'#0A2A66',fg:'#FFFFFF',font:'cursive',weight:400,style:'italic'},
+      {name:'Burger King',bg:'#D62300',fg:'#FFC72C',font:'sans',weight:800,style:'normal'},
+      {name:'KFC',bg:'#E4002B',fg:'#FFFFFF',font:'sans',weight:800,style:'normal'},
+      {name:'Subway',bg:'#FFFFFF',fg:'#00543D',font:'sans',weight:800,style:'italic'},
+      {name:'Pizza Hut',bg:'#EE3831',fg:'#FFFFFF',font:'sans',weight:800,style:'normal'},
+      {name:'Domino\'s',bg:'#0078AE',fg:'#E31837',font:'sans',weight:800,style:'normal'},
+      {name:'Walmart',bg:'#FFFFFF',fg:'#0071CE',font:'sans',weight:700,style:'normal'},
+      {name:'Target',bg:'#CC0000',fg:'#FFFFFF',font:'sans',weight:800,style:'normal'},
+      {name:'IKEA',bg:'#0058A3',fg:'#FFDA1A',font:'sans',weight:900,style:'normal'},
+      {name:'H&M',bg:'#E50010',fg:'#FFFFFF',font:'sans',weight:800,style:'italic'},
+      {name:'Zara',bg:'#FFFFFF',fg:'#000000',font:'serif',weight:300,style:'normal'},
+      {name:'Gucci',bg:'#000000',fg:'#FFFFFF',font:'serif',weight:400,style:'normal'},
+      {name:'Chanel',bg:'#000000',fg:'#FFFFFF',font:'serif',weight:300,style:'normal'},
+      {name:'Louis Vuitton',bg:'#7A5C2E',fg:'#FFFFFF',font:'serif',weight:600,style:'normal'},
+      {name:'Rolex',bg:'#00603A',fg:'#FFD200',font:'serif',weight:600,style:'normal'},
+      {name:'BMW',bg:'#FFFFFF',fg:'#0066B1',font:'sans',weight:700,style:'normal'},
+      {name:'Mercedes-Benz',bg:'#000000',fg:'#FFFFFF',font:'sans',weight:600,style:'normal'},
+      {name:'Toyota',bg:'#FFFFFF',fg:'#EB0A1E',font:'sans',weight:700,style:'normal'},
+      {name:'Ferrari',bg:'#D40000',fg:'#FFEC00',font:'serif',weight:700,style:'italic'},
+      {name:'Tesla',bg:'#000000',fg:'#E82127',font:'sans',weight:700,style:'normal'},
+      {name:'Honda',bg:'#FFFFFF',fg:'#E60012',font:'sans',weight:800,style:'italic'},
+      {name:'Ford',bg:'#003478',fg:'#FFFFFF',font:'serif',weight:600,style:'italic'},
+      {name:'Red Bull',bg:'#001489',fg:'#FFD700',font:'sans',weight:800,style:'normal'},
+      {name:'Monster Energy',bg:'#000000',fg:'#7AC143',font:'sans',weight:900,style:'normal'},
+      {name:'Heineken',bg:'#008200',fg:'#FFFFFF',font:'serif',weight:600,style:'italic'},
+      {name:'Lays',bg:'#FFCC00',fg:'#E31837',font:'sans',weight:800,style:'italic'},
+      {name:'Doritos',bg:'#9B1B30',fg:'#FFC72C',font:'sans',weight:800,style:'italic'},
+      {name:'Oreo',bg:'#0033A0',fg:'#FFFFFF',font:'serif',weight:700,style:'normal'},
+      {name:'Twitter',bg:'#FFFFFF',fg:'#1DA1F2',font:'sans',weight:700,style:'normal'},
+      {name:'Facebook',bg:'#1877F2',fg:'#FFFFFF',font:'sans',weight:700,style:'normal'},
+      {name:'Instagram',bg:'#C13584',fg:'#FFFFFF',font:'sans',weight:600,style:'italic'},
+      {name:'YouTube',bg:'#FFFFFF',fg:'#FF0000',font:'sans',weight:700,style:'normal'},
+      {name:'TikTok',bg:'#000000',fg:'#FFFFFF',font:'sans',weight:700,style:'normal'},
+      {name:'LinkedIn',bg:'#0A66C2',fg:'#FFFFFF',font:'sans',weight:700,style:'normal'},
+      {name:'Microsoft',bg:'#FFFFFF',fg:'#737373',font:'sans',weight:400,style:'normal'},
+      {name:'Intel',bg:'#0071C5',fg:'#FFFFFF',font:'sans',weight:700,style:'italic'},
+      {name:'IBM',bg:'#FFFFFF',fg:'#052FAD',font:'sans',weight:900,style:'normal'},
+      {name:'PlayStation',bg:'#003791',fg:'#FFFFFF',font:'sans',weight:600,style:'normal'},
+      {name:'Xbox',bg:'#107C10',fg:'#FFFFFF',font:'sans',weight:600,style:'normal'},
+      {name:'Nintendo',bg:'#E60012',fg:'#FFFFFF',font:'sans',weight:800,style:'italic'},
+      {name:'FedEx',bg:'#FFFFFF',fg:'#4D148C',font:'sans',weight:800,style:'normal'},
+      {name:'UPS',bg:'#341A02',fg:'#FFB406',font:'serif',weight:700,style:'normal'},
+      {name:'Visa',bg:'#FFFFFF',fg:'#1A1F71',font:'sans',weight:800,style:'italic'},
+      {name:'Mastercard',bg:'#000000',fg:'#FF5F00',font:'sans',weight:700,style:'normal'},
+      {name:'PayPal',bg:'#FFFFFF',fg:'#003087',font:'sans',weight:700,style:'normal'},
+      {name:'Shell',bg:'#FFFFFF',fg:'#ED1C24',font:'sans',weight:900,style:'normal'},
+      {name:'Pringles',bg:'#E2231A',fg:'#FFD700',font:'sans',weight:800,style:'normal'},
+      {name:'Snickers',bg:'#643026',fg:'#FFFFFF',font:'sans',weight:800,style:'italic'},
+      {name:'Skittles',bg:'#FFFFFF',fg:'#7B2D8E',font:'sans',weight:800,style:'normal'},
+      {name:'Airbnb',bg:'#FFFFFF',fg:'#FF5A5F',font:'sans',weight:700,style:'normal'},
+      {name:'Uber',bg:'#000000',fg:'#FFFFFF',font:'sans',weight:700,style:'normal'}
+    ].filter((b,i,arr)=>arr.findIndex(x=>x.name===b.name)===i); // dedupe just in case
+
+    // Curated "things" with a rough relative popularity score (higher = more searched/talked about).
+    // These are reasonable real-world estimates for gameplay purposes, not live data.
+    const HL_ITEMS = [
+      {label:'Pizza',emoji:'🍕',score:95},{label:'Tacos',emoji:'🌮',score:78},
+      {label:'Sushi',emoji:'🍣',score:82},{label:'Hamburgers',emoji:'🍔',score:90},
+      {label:'Ice Cream',emoji:'🍦',score:88},{label:'Coffee',emoji:'☕',score:97},
+      {label:'Tea',emoji:'🍵',score:85},{label:'Avocados',emoji:'🥑',score:70},
+      {label:'Bitcoin',emoji:'₿',score:88},{label:'Dogecoin',emoji:'🐕',score:55},
+      {label:'Ethereum',emoji:'💎',score:75},{label:'The Stock Market',emoji:'📈',score:80},
+      {label:'Dogs',emoji:'🐶',score:96},{label:'Cats',emoji:'🐱',score:94},
+      {label:'Pandas',emoji:'🐼',score:65},{label:'Sharks',emoji:'🦈',score:72},
+      {label:'Dinosaurs',emoji:'🦖',score:75},{label:'Unicorns',emoji:'🦄',score:60},
+      {label:'Aliens',emoji:'👽',score:68},{label:'Ghosts',emoji:'👻',score:62},
+      {label:'Soccer',emoji:'⚽',score:93},{label:'Basketball',emoji:'🏀',score:87},
+      {label:'American Football',emoji:'🏈',score:84},{label:'Tennis',emoji:'🎾',score:70},
+      {label:'Golf',emoji:'⛳',score:62},{label:'Chess',emoji:'♟️',score:58},
+      {label:'The Olympics',emoji:'🥇',score:79},{label:'The Super Bowl',emoji:'🏆',score:85},
+      {label:'Taylor Swift',emoji:'🎤',score:92},{label:'Beyoncé',emoji:'👑',score:85},
+      {label:'The Beatles',emoji:'🎸',score:80},{label:'Elvis Presley',emoji:'🕺',score:68},
+      {label:'TikTok',emoji:'📱',score:91},{label:'Instagram',emoji:'📸',score:89},
+      {label:'YouTube',emoji:'▶️',score:95},{label:'Netflix',emoji:'🎬',score:90},
+      {label:'Video Games',emoji:'🎮',score:88},{label:'Minecraft',emoji:'⛏️',score:82},
+      {label:'Fortnite',emoji:'🪂',score:75},{label:'Chess.com',emoji:'♞',score:45},
+      {label:'Christmas',emoji:'🎄',score:93},{label:'Halloween',emoji:'🎃',score:80},
+      {label:'Valentine\'s Day',emoji:'💘',score:72},{label:'New Year\'s Eve',emoji:'🎆',score:76},
+      {label:'Pizza Hut',emoji:'🍕',score:55},{label:'Domino\'s',emoji:'🍕',score:58},
+      {label:'Mount Everest',emoji:'🏔️',score:60},{label:'The Great Wall of China',emoji:'🧱',score:55},
+      {label:'The Eiffel Tower',emoji:'🗼',score:72},{label:'The Statue of Liberty',emoji:'🗽',score:65},
+      {label:'Bananas',emoji:'🍌',score:74},{label:'Apples',emoji:'🍎',score:78},
+      {label:'Strawberries',emoji:'🍓',score:71},{label:'Watermelon',emoji:'🍉',score:69},
+      {label:'Lions',emoji:'🦁',score:73},{label:'Tigers',emoji:'🐯',score:74},
+      {label:'Elephants',emoji:'🐘',score:68},{label:'Penguins',emoji:'🐧',score:61},
+      {label:'Bitcoin Mining',emoji:'⛏️',score:48},{label:'AI',emoji:'🤖',score:90},
+      {label:'ChatGPT',emoji:'💬',score:85},{label:'Robots',emoji:'🦾',score:67},
+      {label:'Pizza Rolls',emoji:'🍕',score:38},{label:'Hot Dogs',emoji:'🌭',score:66},
+      {label:'Marvel Movies',emoji:'🦸',score:84},{label:'Star Wars',emoji:'🚀',score:82},
+      {label:'Harry Potter',emoji:'⚡',score:80},{label:'Pokémon',emoji:'⚡',score:83},
+      {label:'Roller Coasters',emoji:'🎢',score:58},{label:'Theme Parks',emoji:'🎡',score:64},
+      {label:'Yoga',emoji:'🧘',score:70},{label:'The Gym',emoji:'🏋️',score:77},
+      {label:'Running',emoji:'🏃',score:75},{label:'Swimming',emoji:'🏊',score:69},
+      {label:'Wine',emoji:'🍷',score:71},{label:'Beer',emoji:'🍺',score:79},
+      {label:'Whiskey',emoji:'🥃',score:60},{label:'Energy Drinks',emoji:'⚡',score:64},
+      {label:'Astrology',emoji:'🔮',score:62},{label:'Zodiac Signs',emoji:'♈',score:59},
+      {label:'UFOs',emoji:'🛸',score:53},{label:'Bigfoot',emoji:'🦶',score:34}
     ];
 
     /* ══════════════════════════════════════
@@ -229,6 +345,8 @@
       if(closer5Tick){clearInterval(closer5Tick);closer5Tick=null;}
       if(flagTick){clearInterval(flagTick);flagTick=null;}
       if(flagTimeout){clearTimeout(flagTimeout);flagTimeout=null;}
+      if(logoTick){clearInterval(logoTick);logoTick=null;}
+      if(hlTick){clearTimeout(hlTick);hlTick=null;}
     }
 
     let startingRound=false;
@@ -281,7 +399,9 @@
         else if(gameType==='closer5') startCloser5Game(roomSnapshot);
         else if(gameType==='blackjack21') startBlackjackGame(roomSnapshot);
         else if(gameType==='guessflag') startGuessFlagGame(roomSnapshot);
-        else startSnakePickGame(roomSnapshot);
+        else if(gameType==='snakepick') startSnakePickGame(roomSnapshot);
+        else if(gameType==='logoquiz') startLogoQuizGame(roomSnapshot);
+        else startHigherLowerGame(roomSnapshot);
 
         showScreen('screen-game');
       } finally {
@@ -1084,6 +1204,281 @@
     }
 
     /* ══════════════════════════════════════
+       GAME: LOGO QUIZ
+    ══════════════════════════════════════ */
+    const LOGO_REVEAL_STEPS=[20,40,60,80,100]; // % of card width revealed, step every 2s
+    let logoAnswer=null;
+    let logoOptions=[];
+    let logoProcessing=false;
+    let logoStepIndex=0;
+    let logoTick=null;
+    let logoGuessesCache={};
+
+    function buildLogoOptions(answer){
+      const pool=BRAND_CARDS.filter(b=>b.name!==answer.name);
+      const wrong=[];
+      while(wrong.length<3&&pool.length){
+        const idx=Math.floor(Math.random()*pool.length);
+        wrong.push(pool.splice(idx,1)[0]);
+      }
+      const options=[answer,...wrong];
+      for(let i=options.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [options[i],options[j]]=[options[j],options[i]];
+      }
+      return options;
+    }
+
+    async function startLogoQuizGame(snap){
+      logoProcessing=false;
+      logoStepIndex=0;
+      logoAnswer=pickRandom(BRAND_CARDS);
+      logoOptions=buildLogoOptions(logoAnswer);
+
+      await update(roomRef,{game:{
+        type:'logoquiz',
+        phase:'revealing',
+        brand:logoAnswer,
+        options:logoOptions.map(o=>o.name),
+        revealPct:LOGO_REVEAL_STEPS[0],
+        winnerKey:null,
+        guesses:{}
+      }});
+
+      renderHostGameHeader('🏷️ Logo Quiz','Watch closely — it reveals a little more every 2 seconds!');
+      renderLogoHostView(LOGO_REVEAL_STEPS[0]);
+      listenLogoGuesses();
+
+      logoTick=setInterval(()=>{
+        if(logoProcessing){clearInterval(logoTick);logoTick=null;return;}
+        logoStepIndex++;
+        if(logoStepIndex>=LOGO_REVEAL_STEPS.length){
+          clearInterval(logoTick);logoTick=null;
+          resolveLogoRound(null);
+          return;
+        }
+        const pct=LOGO_REVEAL_STEPS[logoStepIndex];
+        update(roomRef,{'game/revealPct':pct});
+        renderLogoHostView(pct);
+      },2000);
+    }
+
+    function renderLogoHostView(pct){
+      const area=document.getElementById('game-area');area.innerHTML='';
+      const wrap=document.createElement('div');wrap.className='flag-reveal-wrap';
+      const b=logoAnswer;
+      const longName=b.name.length>10;
+      wrap.innerHTML=`
+        <div class="flag-frame logo-frame" style="background:${b.bg}">
+          <div class="logo-card-inner" style="clip-path:inset(0 ${100-pct}% 0 0)">
+            <span class="logo-card-text${longName?' logo-card-text-sm':''}" style="color:${b.fg};font-family:${b.font==='cursive'?"'Brush Script MT',cursive":b.font==='serif'?"'Georgia',serif":"'Nunito',sans-serif"};font-weight:${b.weight};font-style:${b.style}">${esc(b.name)}</span>
+          </div>
+        </div>
+        <div class="flag-timer-dots">${LOGO_REVEAL_STEPS.map((s,i)=>`<span class="flag-dot${i<=logoStepIndex?' lit':''}"></span>`).join('')}</div>`;
+      area.appendChild(wrap);
+      const grid=document.createElement('div');grid.className='flag-player-grid';grid.id='logo-player-grid';
+      area.appendChild(grid);
+      renderLogoGuessStatus();
+    }
+
+    function renderLogoGuessStatus(){
+      const grid=document.getElementById('logo-player-grid');
+      if(!grid)return;
+      grid.innerHTML='';
+      const players=getPlayers(roomSnapshot);
+      players.forEach(p=>{
+        const g=logoGuessesCache[p.key];
+        const tile=document.createElement('div');
+        tile.className='flag-tile'+(g?(g.correct?' correct':' wrong'):'');
+        tile.innerHTML=`<span class="rtile-avatar">${p.avatar}</span><span class="rtile-name">${esc(p.name)}</span><span class="rtile-status">${g?(g.correct?'✅ Got it!':'❌ Guessed'):'🤔 Thinking…'}</span>`;
+        grid.appendChild(tile);
+      });
+    }
+
+    function listenLogoGuesses(){
+      logoGuessesCache={};
+      attachGameListener('rooms/'+roomCode+'/game/guesses',snap=>{
+        const data=snap.val()||{};
+        logoGuessesCache=data;
+        renderLogoGuessStatus();
+        if(logoProcessing)return;
+        const winnerEntry=Object.entries(data).find(([,g])=>g.correct);
+        if(winnerEntry){
+          resolveLogoRound(winnerEntry[0]);
+        }
+      });
+    }
+
+    async function resolveLogoRound(winnerKey){
+      if(logoProcessing)return;
+      logoProcessing=true;
+      if(logoTick){clearInterval(logoTick);logoTick=null;}
+      detachGameListener();
+
+      await update(roomRef,{'game/phase':'revealed','game/revealPct':100,'game/winnerKey':winnerKey});
+      renderLogoHostView(100);
+      document.getElementById('turn-label').textContent = winnerKey
+        ? `🎉 ${roomSnapshot.players[winnerKey].avatar} ${roomSnapshot.players[winnerKey].name} guessed it — ${logoAnswer.name}!`
+        : `⏱ Time's up! It was ${logoAnswer.name}`;
+
+      let msg;
+      if(winnerKey){
+        const scoreUpdates={};
+        scoreUpdates[`players/${winnerKey}/score`]=(roomSnapshot.players[winnerKey].score||0)+1;
+        await update(roomRef,scoreUpdates);
+        const snap=await get(roomRef);roomSnapshot=snap.val();
+        msg=`🏷️ ${roomSnapshot.players[winnerKey].avatar} ${roomSnapshot.players[winnerKey].name} correctly guessed ${logoAnswer.name}!`;
+      } else {
+        msg=`🏷️ Nobody guessed it — it was ${logoAnswer.name}!`;
+      }
+
+      const tokenAtSchedule=roundToken;
+      setTimeout(()=>{ if(roundToken===tokenAtSchedule) showRoundScoreboard(msg); },2600);
+    }
+
+    /* ══════════════════════════════════════
+       GAME: HIGHER OR LOWER
+    ══════════════════════════════════════ */
+    const HL_MAX_GUESS_MS=12000;
+    let hlActivePlayers=[];
+    let hlItemA=null,hlItemB=null;
+    let hlProcessing=false;
+    let hlTick=null;
+    let hlGuessesCache={};
+
+    function pickDistinctPair(){
+      let a=pickRandom(HL_ITEMS),b=pickRandom(HL_ITEMS);
+      let attempts=0;
+      while((a.label===b.label||a.score===b.score)&&attempts<50){
+        b=pickRandom(HL_ITEMS);
+        attempts++;
+      }
+      return [a,b];
+    }
+
+    async function startHigherLowerGame(snap){
+      hlProcessing=false;
+      hlActivePlayers=shuffleArray(getPlayers(snap)).map(p=>({...p,eliminated:false}));
+      await update(roomRef,{'game/type':'higherlower'});
+      renderHostGameHeader('📊 Higher or Lower','Guess which one is searched more — get it wrong and you\'re out!');
+      startHigherLowerSubRound();
+    }
+
+    function startHigherLowerSubRound(){
+      const alive=hlActivePlayers.filter(p=>!p.eliminated);
+      if(alive.length<=1){ finishHigherLowerGame(alive[0]||null); return; }
+      hlProcessing=false;
+      [hlItemA,hlItemB]=pickDistinctPair();
+      hlGuessesCache={};
+
+      update(roomRef,{game:{
+        type:'higherlower',
+        phase:'guessing',
+        itemA:hlItemA,
+        itemB:hlItemB,
+        guesses:{},
+        eliminatedKeys:hlActivePlayers.filter(p=>p.eliminated).map(p=>p.key)
+      }});
+
+      renderHigherLowerHostView('guessing');
+      listenHigherLowerGuesses();
+
+      const tokenAtSchedule=roundToken;
+      hlTick=setTimeout(()=>{
+        if(roundToken!==tokenAtSchedule||hlProcessing)return;
+        resolveHigherLowerRound();
+      },HL_MAX_GUESS_MS);
+    }
+
+    function renderHigherLowerHostView(phase){
+      const area=document.getElementById('game-area');area.innerHTML='';
+      const wrap=document.createElement('div');wrap.className='hl-wrap';
+      const showVal=phase==='revealed';
+      wrap.innerHTML=`
+        <div class="hl-card">
+          <span class="hl-emoji">${hlItemA.emoji}</span>
+          <span class="hl-label">${esc(hlItemA.label)}</span>
+          ${showVal?`<span class="hl-score">${hlItemA.score}</span>`:''}
+        </div>
+        <div class="hl-vs">VS</div>
+        <div class="hl-card">
+          <span class="hl-emoji">${hlItemB.emoji}</span>
+          <span class="hl-label">${esc(hlItemB.label)}</span>
+          ${showVal?`<span class="hl-score">${hlItemB.score}</span>`:''}
+        </div>`;
+      area.appendChild(wrap);
+      const grid=document.createElement('div');grid.className='flag-player-grid';grid.id='hl-player-grid';
+      area.appendChild(grid);
+      renderHigherLowerStatus();
+      document.getElementById('turn-label').textContent = phase==='guessing'
+        ? `Is "${hlItemB.label}" searched higher or lower than "${hlItemA.label}"?`
+        : (hlItemB.score>hlItemA.score ? `📈 ${hlItemB.label} is higher!` : `📉 ${hlItemB.label} is lower!`);
+    }
+
+    function renderHigherLowerStatus(){
+      const grid=document.getElementById('hl-player-grid');
+      if(!grid)return;
+      grid.innerHTML='';
+      hlActivePlayers.filter(p=>!p.eliminated).forEach(p=>{
+        const g=hlGuessesCache[p.key];
+        const tile=document.createElement('div');
+        tile.className='flag-tile'+(g?' correct':'');
+        tile.innerHTML=`<span class="rtile-avatar">${p.avatar}</span><span class="rtile-name">${esc(p.name)}</span><span class="rtile-status">${g?'🔒 Locked in':'🤔 Thinking…'}</span>`;
+        grid.appendChild(tile);
+      });
+    }
+
+    function listenHigherLowerGuesses(){
+      attachGameListener('rooms/'+roomCode+'/game/guesses',snap=>{
+        const data=snap.val()||{};
+        hlGuessesCache=data;
+        renderHigherLowerStatus();
+        if(hlProcessing)return;
+        const alive=hlActivePlayers.filter(p=>!p.eliminated);
+        const allGuessed=alive.every(p=>data[p.key]!=null);
+        if(allGuessed) resolveHigherLowerRound();
+      });
+    }
+
+    async function resolveHigherLowerRound(){
+      if(hlProcessing)return;
+      hlProcessing=true;
+      if(hlTick){clearTimeout(hlTick);hlTick=null;}
+      detachGameListener();
+
+      const actuallyHigher=hlItemB.score>hlItemA.score; // is B higher than A?
+      const alive=hlActivePlayers.filter(p=>!p.eliminated);
+      alive.forEach(p=>{
+        const guess=hlGuessesCache[p.key]; // 'higher' | 'lower' | undefined (never guessed)
+        const correct=guess===(actuallyHigher?'higher':'lower');
+        if(!correct) p.eliminated=true;
+      });
+
+      await update(roomRef,{'game/phase':'revealed','game/itemA':hlItemA,'game/itemB':hlItemB,'game/eliminatedKeys':hlActivePlayers.filter(p=>p.eliminated).map(p=>p.key)});
+      renderHigherLowerHostView('revealed');
+
+      const tokenAtSchedule=roundToken;
+      await new Promise(r=>setTimeout(r,2800));
+      if(roundToken!==tokenAtSchedule)return;
+
+      const stillAlive=hlActivePlayers.filter(p=>!p.eliminated);
+      if(stillAlive.length<=1){
+        finishHigherLowerGame(stillAlive[0]||null);
+      } else {
+        startHigherLowerSubRound();
+      }
+    }
+
+    async function finishHigherLowerGame(winner){
+      detachGameListener();
+      const scoreUpdates={};
+      if(winner) scoreUpdates[`players/${winner.key}/score`]=(roomSnapshot.players[winner.key].score||0)+2;
+      if(Object.keys(scoreUpdates).length) await update(roomRef,scoreUpdates);
+      const snap=await get(roomRef);roomSnapshot=snap.val();
+      showRoundScoreboard(winner?`📊 ${winner.avatar} ${winner.name} called it the longest!`:'📊 Everyone got it wrong!');
+    }
+
+    /* ══════════════════════════════════════
        GAME: SNAKE PICK
     ══════════════════════════════════════ */
     let snakeActivePlayers=[];
@@ -1490,6 +1885,18 @@
     .flag-tile{background:var(--card-bg);border:2px solid rgba(255,255,255,.1);border-radius:14px;padding:.75rem .6rem;text-align:center;transition:border-color .3s,background .3s;}
     .flag-tile.correct{border-color:rgba(0,230,118,.5);background:color-mix(in srgb,#00E676 10%,var(--card-bg));}
     .flag-tile.wrong{border-color:rgba(255,82,82,.35);background:color-mix(in srgb,#FF5252 6%,var(--card-bg));opacity:.75;}
+    /* Logo Quiz */
+    .logo-frame{display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+    .logo-card-inner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:clip-path .5s ease;}
+    .logo-card-text{font-size:1.6rem;letter-spacing:.02em;text-align:center;padding:0 1rem;white-space:nowrap;}
+    .logo-card-text-sm{font-size:1.1rem;}
+    /* Higher or Lower */
+    .hl-wrap{display:flex;align-items:center;justify-content:center;gap:20px;margin-bottom:1.5rem;}
+    .hl-card{background:var(--card-bg);border:2px solid rgba(255,255,255,.15);border-radius:18px;padding:1.5rem 1.2rem;display:flex;flex-direction:column;align-items:center;gap:.5rem;min-width:160px;}
+    .hl-emoji{font-size:2.8rem;}
+    .hl-label{font-family:'Fredoka One',cursive;font-size:1.1rem;color:var(--white);text-align:center;}
+    .hl-score{font-family:'Fredoka One',cursive;font-size:1.6rem;color:var(--yellow);}
+    .hl-vs{font-family:'Fredoka One',cursive;font-size:1.3rem;color:var(--coral);}
     /* Snake Pick */
     .snake-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px;margin-bottom:1rem;}
     .snake-tile{background:var(--card-bg);border:2px solid rgba(255,255,255,.12);border-radius:14px;padding:1rem .6rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;transition:border-color .3s,background .3s;}
