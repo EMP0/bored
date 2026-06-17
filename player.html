@@ -129,7 +129,7 @@
       if(!me) return;
 
       if(room.status==='lobby'){
-        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; snakeProcessingP=false; logoGuessSent=false; hlGuessSent=false; lastGameType=null; lastPhase=null;
+        detProcessing=false; rocketProcessing=false; closer5Processing=false; bjActionProcessing=false; flagGuessSent=false; snakeProcessingP=false; logoGuessSent=false; hlGuessSent=false; pkPickSent=false; anaSubmitting=false; anaLastRenderedAttempts=-1; anaAwaitingVerdictFor=-1; artistGuessSent=false; lastGameType=null; lastPhase=null;
         stopCloser5CountdownLoop();
         showScreen('screen-lobby');
         document.getElementById('lobby-round-info').textContent =
@@ -184,6 +184,9 @@
     else if(game.type==='snakepick') renderSnakePickGame(room, me, game);
     else if(game.type==='logoquiz') renderLogoQuizGame(room, me, game);
     else if(game.type==='higherlower') renderHigherLowerGame(room, me, game);
+    else if(game.type==='penaltykick') renderPenaltyKickGame(room, me, game);
+    else if(game.type==='anagram') renderAnagramGame(room, me, game);
+    else if(game.type==='guessartist') renderGuessArtistGame(room, me, game);
   }
 
   /* ══════════════════════════════════════
@@ -659,6 +662,270 @@
   }
 
   /* ══════════════════════════════════════
+     GUESS THE ARTIST (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let artistGuessSent = false;
+
+  function artistCardHtml(a, blurPx){
+    const longName = a.name.length>14;
+    const fontFamily = a.font==='cursive' ? "'Brush Script MT',cursive" : a.font==='serif' ? "'Georgia',serif" : "'Nunito',sans-serif";
+    return `
+      <div class="flag-frame-p logo-frame-p" style="background:${a.bg}">
+        <div class="artist-card-inner-p" style="filter:blur(${blurPx}px)">
+          <span class="logo-card-text-p${longName?' logo-card-text-p-sm':''}" style="color:${a.fg};font-family:${fontFamily};font-weight:${a.weight};font-style:${a.style}">${esc(a.name)}</span>
+        </div>
+      </div>`;
+  }
+
+  function renderGuessArtistGame(room, me, game){
+    document.getElementById('game-icon').textContent = '🎙️';
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+    const a = game.artist||{};
+
+    const myGuess = game.guesses?.[myPlayerKey];
+
+    if(game.phase==='revealed'){
+      const won = game.winnerKey===myPlayerKey;
+      turnEl.textContent = won ? '🎉 You got it!' : (game.winnerKey ? 'Round over!' : "Time's up!");
+      subEl.textContent = `It was ${a.name}`;
+      area.innerHTML = `
+        ${artistCardHtml(a, 0)}
+        <div class="flag-result-msg">${won?'+1 point! 🏆':(myGuess&&!myGuess.correct?'❌ Not this time':'')}</div>`;
+      return;
+    }
+
+    artistGuessSent = !!myGuess;
+    const blurPx = game.blurPx!=null ? game.blurPx : 16;
+
+    if(myGuess){
+      turnEl.textContent = myGuess.correct ? '✅ Nice ear!' : '🔒 Guess locked in';
+      subEl.textContent = myGuess.correct ? 'Waiting for the round to finish…' : 'Watch and see who gets it!';
+      area.innerHTML = artistCardHtml(a, blurPx);
+      return;
+    }
+
+    turnEl.textContent = '🎙️ Who is this artist?';
+    subEl.textContent = 'It sharpens more every few seconds!';
+    const optsHtml = (game.options||[]).map(name=>
+      `<button class="flag-opt-btn" data-name="${esc(name)}">${esc(name)}</button>`
+    ).join('');
+    area.innerHTML = `
+      ${artistCardHtml(a, blurPx)}
+      <div class="flag-options-grid">${optsHtml}</div>`;
+    area.querySelectorAll('.flag-opt-btn').forEach(btn=>{
+      btn.onclick = ()=>submitArtistGuess(btn.dataset.name, a.name);
+    });
+  }
+
+  async function submitArtistGuess(guessName, correctName){
+    if(artistGuessSent) return;
+    artistGuessSent = true;
+    document.querySelectorAll('.flag-opt-btn').forEach(b=>b.disabled=true);
+    const correct = guessName===correctName;
+    await update(ref(db,`rooms/${roomCode}/game/guesses/${myPlayerKey}`), {correct, guess: guessName, at: Date.now()});
+  }
+
+  /* ══════════════════════════════════════
+     PENALTY KICK (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let pkPickSent = false;
+
+  function pkSideButtonsHtml(){
+    return `
+      <div class="pk-side-row">
+        <button class="pk-side-btn" id="pk-left-btn" data-side="left">⬅️<br/>Left</button>
+        <button class="pk-side-btn" id="pk-middle-btn" data-side="middle">⬆️<br/>Middle</button>
+        <button class="pk-side-btn" id="pk-right-btn" data-side="right">➡️<br/>Right</button>
+      </div>`;
+  }
+
+  function renderPenaltyKickGame(room, me, game){
+    document.getElementById('game-icon').textContent = '🥅';
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+
+    const iAmKeeper = game.keeperKey===myPlayerKey;
+    const iAmCurrentShooter = game.shooterKey===myPlayerKey;
+
+    if(game.phase==='intro'){
+      turnEl.textContent = iAmKeeper ? '🧤 You\'re in goal!' : '⚽ Shootout time!';
+      subEl.textContent = iAmKeeper ? 'Get ready to guess where every shot is going.' : `${game.keeperName} is defending the goal.`;
+      area.innerHTML = `<div class="big-result">${iAmKeeper?'🧤':'⚽'}</div>`;
+      pkPickSent = false;
+      return;
+    }
+
+    if(game.phase==='revealed'){
+      turnEl.textContent = '👀 Revealing…';
+      subEl.textContent = iAmCurrentShooter ? 'See the result on the big screen!' : (iAmKeeper ? 'See the result on the big screen!' : 'Watch the big screen for the result!');
+      area.innerHTML = `<div class="big-result">⚽</div>`;
+      pkPickSent = false;
+      return;
+    }
+
+    if(game.phase==='shooter_picking'){
+      if(iAmCurrentShooter){
+        pkPickSent = !!game.shooterPick;
+        if(pkPickSent){
+          turnEl.textContent = '🔒 Shot locked in!';
+          subEl.textContent = 'Waiting for the keeper to guess…';
+          area.innerHTML = `<div class="big-result">⚽</div>`;
+        } else {
+          turnEl.textContent = '⚽ Pick your side!';
+          subEl.textContent = 'The keeper can\'t see this — choose wisely.';
+          area.innerHTML = pkSideButtonsHtml();
+          wirePkSideButtons('shooterPick');
+        }
+      } else if(iAmKeeper){
+        turnEl.textContent = '🧤 Stay ready…';
+        subEl.textContent = `${game.shooterName} is choosing where to shoot.`;
+        area.innerHTML = `<div class="big-result">🧤</div>`;
+      } else {
+        turnEl.textContent = '👀 Watching';
+        subEl.textContent = `${game.shooterName} vs ${game.keeperName}`;
+        area.innerHTML = `<div class="big-result">⚽</div>`;
+      }
+      return;
+    }
+
+    if(game.phase==='keeper_picking'){
+      if(iAmKeeper){
+        pkPickSent = !!game.keeperPick;
+        if(pkPickSent){
+          turnEl.textContent = '🔒 Guess locked in!';
+          subEl.textContent = 'Revealing the result…';
+          area.innerHTML = `<div class="big-result">🧤</div>`;
+        } else {
+          turnEl.textContent = '🧤 Guess the side!';
+          subEl.textContent = `Where do you think ${game.shooterName} is shooting?`;
+          area.innerHTML = pkSideButtonsHtml();
+          wirePkSideButtons('keeperPick');
+        }
+      } else if(iAmCurrentShooter){
+        turnEl.textContent = '⏳ Shot taken!';
+        subEl.textContent = 'The keeper is guessing now…';
+        area.innerHTML = `<div class="big-result">⚽</div>`;
+      } else {
+        turnEl.textContent = '👀 Watching';
+        subEl.textContent = `${game.shooterName} vs ${game.keeperName}`;
+        area.innerHTML = `<div class="big-result">🧤</div>`;
+      }
+      return;
+    }
+  }
+
+  function wirePkSideButtons(field){
+    ['pk-left-btn','pk-middle-btn','pk-right-btn'].forEach(id=>{
+      const btn=document.getElementById(id);
+      if(btn) btn.onclick = ()=>submitPkPick(field, btn.dataset.side);
+    });
+  }
+
+  async function submitPkPick(field, side){
+    if(pkPickSent) return;
+    pkPickSent = true;
+    document.querySelectorAll('.pk-side-btn').forEach(b=>b.disabled=true);
+    await update(ref(db,`rooms/${roomCode}/game`), {[field]: side});
+  }
+
+  /* ══════════════════════════════════════
+     ANAGRAM (PLAYER VIEW)
+  ══════════════════════════════════════ */
+  let anaSubmitting = false;
+  let anaLastRenderedAttempts = -1;
+  let anaAwaitingVerdictFor = -1; // attempts count we're waiting on a host verdict for
+
+  function renderAnagramGame(room, me, game){
+    document.getElementById('game-icon').textContent = '🔤';
+    const turnEl = document.getElementById('game-turn');
+    const subEl = document.getElementById('game-sub');
+    const area = document.getElementById('game-area');
+
+    const myGuess = game.guesses?.[myPlayerKey];
+    const myAttempts = myGuess?.attempts||0;
+    const iWon = myGuess?.correct===true;
+    const verdictKnown = myGuess&&Object.prototype.hasOwnProperty.call(myGuess,'correct');
+
+    if(game.phase==='revealed'){
+      const wonOverall = game.winnerKey===myPlayerKey;
+      turnEl.textContent = wonOverall ? '🎉 You got it!' : (game.winnerKey ? 'Round over!' : "Time's up!");
+      subEl.textContent = `The word was ${game.answer}`;
+      area.innerHTML = `
+        <div class="ana-emoji-p">${game.emoji||'🔤'}</div>
+        <div class="ana-result-word">${esc(game.answer||'')}</div>
+        <div class="flag-result-msg">${wonOverall?'+2 points! 🏆':(myAttempts>0&&!iWon?'-'+myAttempts+' point'+(myAttempts!==1?'s':''):'')}</div>`;
+      anaLastRenderedAttempts=-1;anaAwaitingVerdictFor=-1;
+      return;
+    }
+
+    if(iWon){
+      turnEl.textContent = '✅ Nailed it!';
+      subEl.textContent = 'Waiting for the round to finish…';
+      area.innerHTML = `<div class="ana-emoji-p">${game.emoji||'🔤'}</div><div class="ana-scrambled-p">${esc(game.scrambled||'')}</div>`;
+      return;
+    }
+
+    if(myAttempts>=2&&verdictKnown){
+      turnEl.textContent = '🔒 Out of tries';
+      subEl.textContent = 'Watch and see who gets it!';
+      area.innerHTML = `<div class="ana-emoji-p">${game.emoji||'🔤'}</div><div class="ana-scrambled-p">${esc(game.scrambled||'')}</div>`;
+      return;
+    }
+
+    // Right after submitting, wait for the host's verdict before deciding whether to show "try again" or "you won"
+    if(myAttempts>0&&!verdictKnown){
+      if(anaAwaitingVerdictFor!==myAttempts){
+        anaAwaitingVerdictFor=myAttempts;
+        turnEl.textContent = '🤔 Checking…';
+        subEl.textContent = 'Just a sec!';
+        area.innerHTML = `<div class="ana-emoji-p">${game.emoji||'🔤'}</div><div class="ana-scrambled-p">${esc(game.scrambled||'')}</div>`;
+      }
+      return;
+    }
+
+    // Re-render the input fresh whenever attempts count changes (e.g. after a wrong guess) so the field clears
+    if(anaLastRenderedAttempts!==myAttempts){
+      anaLastRenderedAttempts=myAttempts;
+      anaAwaitingVerdictFor=-1;
+      turnEl.textContent = myAttempts===0 ? '🔤 Unscramble it!' : '🔁 One more try!';
+      subEl.textContent = myAttempts===0 ? 'First guess locks in instantly — wrong answers cost a point.' : 'Wrong again costs another point — make it count!';
+      area.innerHTML = `
+        <div class="ana-emoji-p">${game.emoji||'🔤'}</div>
+        <div class="ana-scrambled-p">${esc(game.scrambled||'')}</div>
+        <input type="text" id="ana-input" class="ana-input" placeholder="Type your answer…" autocomplete="off" autocapitalize="characters"/>
+        <button class="ana-submit-btn" id="ana-submit-btn">Submit</button>`;
+      const input=document.getElementById('ana-input');
+      const btn=document.getElementById('ana-submit-btn');
+      const fire=()=>submitAnagramGuess(input.value, myAttempts);
+      btn.onclick=fire;
+      input.onkeydown=(e)=>{ if(e.key==='Enter') fire(); };
+      input.focus();
+    }
+  }
+
+  async function submitAnagramGuess(rawValue, attemptsBefore){
+    if(anaSubmitting) return;
+    const guess=String(rawValue||'').trim();
+    if(!guess) return;
+    anaSubmitting=true;
+    document.getElementById('ana-submit-btn')?.setAttribute('disabled','true');
+    document.getElementById('ana-input')?.setAttribute('disabled','true');
+
+    // The correct word is never sent to the client before reveal, so the host judges correctness
+    // server-side (from its own in-memory answer) once this raw guess lands — never trust a
+    // client-computed "correct" flag for this game.
+    await update(ref(db,`rooms/${roomCode}/game/guesses/${myPlayerKey}`), {
+      attempts: attemptsBefore+1,
+      lastGuess: guess.toUpperCase(),
+      at: Date.now()
+    });
+    anaSubmitting=false;
+  }
+
+  /* ══════════════════════════════════════
      SNAKE PICK (PLAYER VIEW)
   ══════════════════════════════════════ */
   let snakeProcessingP = false;
@@ -883,6 +1150,7 @@
   .logo-card-inner-p{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:clip-path .5s ease;}
   .logo-card-text-p{font-size:1.3rem;letter-spacing:.02em;text-align:center;padding:0 .8rem;white-space:nowrap;}
   .logo-card-text-p-sm{font-size:.95rem;}
+  .artist-card-inner-p{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:filter .5s ease;}
   /* Higher or Lower */
   .hl-wrap-p{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;max-width:360px;margin-bottom:1.4rem;}
   .hl-card-p{background:var(--card-bg);border:2px solid rgba(255,255,255,.15);border-radius:16px;padding:1rem .6rem;display:flex;flex-direction:column;align-items:center;gap:.4rem;flex:1;min-width:0;}
@@ -899,6 +1167,23 @@
   .hl-lower-btn:hover{transform:translateY(-2px);box-shadow:0 7px 0 #c23a3a;}
   .hl-lower-btn:active{transform:translateY(3px);box-shadow:0 2px 0 #c23a3a;}
   .hl-higher-btn:disabled,.hl-lower-btn:disabled{opacity:.4;cursor:default;transform:none;}
+  /* Penalty Kick */
+  .pk-side-row{display:flex;gap:12px;width:100%;max-width:380px;}
+  .pk-side-btn{flex:1;aspect-ratio:1;border-radius:16px;border:3px solid rgba(255,255,255,.15);background:var(--card-bg);color:var(--white);font-family:'Fredoka One',cursive;font-size:1.1rem;line-height:1.6;cursor:pointer;transition:transform .12s,border-color .15s,background .15s;}
+  .pk-side-btn:hover{transform:scale(1.05);border-color:var(--yellow);background:#21205a;}
+  .pk-side-btn:active{transform:scale(.93);}
+  .pk-side-btn:disabled{opacity:.4;cursor:default;transform:none;}
+  /* Anagram */
+  .ana-emoji-p{font-size:2.5rem;margin-bottom:.4rem;}
+  .ana-scrambled-p{font-family:'Fredoka One',cursive;font-size:1.6rem;letter-spacing:.15em;color:var(--yellow);margin-bottom:1.2rem;word-break:break-all;text-align:center;}
+  .ana-result-word{font-family:'Fredoka One',cursive;font-size:1.5rem;color:var(--cyan);margin-bottom:.6rem;}
+  .ana-input{width:100%;max-width:280px;padding:.85rem 1rem;border-radius:12px;border:2px solid rgba(255,255,255,.18);background:var(--card-bg);color:var(--white);font-family:'Nunito',sans-serif;font-size:1.1rem;font-weight:700;text-align:center;text-transform:uppercase;margin-bottom:.8rem;outline:none;}
+  .ana-input:focus{border-color:var(--yellow);}
+  .ana-input:disabled{opacity:.5;}
+  .ana-submit-btn{width:100%;max-width:280px;padding:.85rem;border-radius:12px;background:var(--yellow);color:var(--navy);font-family:'Fredoka One',cursive;font-size:1.1rem;border:none;cursor:pointer;box-shadow:0 5px 0 var(--yellow-dark);transition:transform .12s,box-shadow .12s;}
+  .ana-submit-btn:hover{transform:translateY(-2px);box-shadow:0 7px 0 var(--yellow-dark);}
+  .ana-submit-btn:active{transform:translateY(3px);box-shadow:0 2px 0 var(--yellow-dark);}
+  .ana-submit-btn:disabled{opacity:.5;cursor:default;transform:none;}
   /* Snake Pick */
   .snake-pick-area{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:340px;}
   .snake-pick-btn{aspect-ratio:1;border-radius:16px;border:3px solid rgba(255,255,255,.12);background:var(--card-bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:default;transition:transform .12s,border-color .15s,background .15s;}
