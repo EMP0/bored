@@ -462,13 +462,46 @@
       showScreen('screen-lobby');
       renderLobby();
       onValue(ref(db,'rooms/'+roomCode+'/players'),snap=>renderLobbyPlayers(snap.val()||{}));
+      attachNextRoundRequestListener();
+    }
+
+    /* ══════════════════════════════════════
+       PLAYER 1's "next round" REQUEST
+       One listener for the whole match, attached once. It always re-reads the
+       room's CURRENT status/round fresh from the DB instead of trusting whatever
+       round/isLast a per-round listener happened to capture in its closure —
+       stale per-round listeners (one attached each time the lobby/scoreboard was
+       rendered, never reliably torn down) used to pile up and fire together,
+       racing each other and restarting rounds instead of advancing past them.
+    ══════════════════════════════════════ */
+    let nextRoundRequestListener=null;
+    let processingNextRoundRequest=false;
+
+    function attachNextRoundRequestListener(){
+      if(nextRoundRequestListener)return;
+      nextRoundRequestListener=onValue(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),async snap=>{
+        if(snap.val()!==true||processingNextRoundRequest)return;
+        processingNextRoundRequest=true;
+        try{
+          await update(roomRef,{nextRoundRequest:null});
+          const fresh=await get(roomRef);
+          const room=fresh.val();
+          if(!room)return;
+          if(room.status==='lobby') await startNextRound();
+          else if(room.status==='scoreboard'){
+            const round=room.currentRound||1;
+            await advanceFromScoreboard(round>=room.totalRounds,round);
+          }
+        } finally { processingNextRoundRequest=false; }
+      });
+    }
+    function detachNextRoundRequestListener(){
+      if(nextRoundRequestListener){off(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),nextRoundRequestListener);nextRoundRequestListener=null;}
     }
 
     /* ══════════════════════════════════════
        LOBBY
     ══════════════════════════════════════ */
-    let lobbyStartListener=null;
-
     async function renderLobby(){
       document.getElementById('room-code-display').textContent=roomCode;
       const basePath=location.pathname.substring(0,location.pathname.lastIndexOf('/')+1);
@@ -478,22 +511,8 @@
       document.getElementById('join-url').textContent=playerUrl;
       document.getElementById('lobby-round-info').textContent=`Round ${roomSnapshot?.currentRound||1} of ${roomSnapshot?.totalRounds||totalRounds} · ${selectedMode} mode`;
       console.log('[BORED] renderLobby called, roomSnapshot.currentRound=',roomSnapshot?.currentRound);
-      document.getElementById('start-game-btn').onclick=()=>{ clearLobbyStartListener(); startNextRound(); };
+      document.getElementById('start-game-btn').onclick=()=>{ startNextRound(); };
       document.getElementById('menu-btn').onclick=goToMenu;
-
-      clearLobbyStartListener();
-      await set(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),null);
-      const checkSnap=await get(ref(db,'rooms/'+roomCode+'/nextRoundRequest'));
-      console.log('[BORED] renderLobby: nextRoundRequest after clear =',checkSnap.val());
-
-      // Let Player 1's phone trigger the round start too — attached only after the clear has landed
-      lobbyStartListener=onValue(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),snap=>{
-        console.log('[BORED] lobbyStartListener fired, value=',snap.val());
-        if(snap.val()===true){ clearLobbyStartListener(); startNextRound(); }
-      });
-    }
-    function clearLobbyStartListener(){
-      if(lobbyStartListener){off(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),lobbyStartListener);lobbyStartListener=null;}
     }
     function renderLobbyPlayers(players){
       const list=document.getElementById('lobby-players');list.innerHTML='';
@@ -2251,8 +2270,6 @@
       showRoundScoreboard(winner?`🐍 ${winner.avatar} ${winner.name} had the longest snake!`:'🐍 Everyone got eliminated!');
     }
 
-    let sbNextRoundListener=null;
-
     async function showRoundScoreboard(resultMsg){
       detachGameListener();
       clearAllGameTimers();
@@ -2275,36 +2292,28 @@
       const nextBtn=document.getElementById('sb-next-btn');
       const menuSbBtn=document.getElementById('sb-menu-btn');
       nextBtn.textContent=isLast?'🏆 See Final Results':'▶ Next Round';
-      nextBtn.onclick=()=>{ console.log('[BORED] Next button clicked, round=',round,'isLast=',isLast); clearSbNextRoundListener(); advanceFromScoreboard(isLast,round); };
+      nextBtn.onclick=()=>{ console.log('[BORED] Next button clicked, round=',round,'isLast=',isLast); advanceFromScoreboard(isLast,round); };
       menuSbBtn.onclick=goToMenu;
 
-      clearSbNextRoundListener();
       await update(roomRef,{status:'scoreboard',nextRoundRequest:null});
+    }
 
-      // Let Player 1's phone trigger the same advance action — attached only after the clear has landed
-      sbNextRoundListener=onValue(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),snap=>{
-        console.log('[BORED] sbNextRoundListener fired, value=',snap.val(),'round=',round,'isLast=',isLast);
-        if(snap.val()===true){
-          clearSbNextRoundListener();
-          advanceFromScoreboard(isLast,round);
-        }
-      });
-    }
-    function clearSbNextRoundListener(){
-      if(sbNextRoundListener){off(ref(db,'rooms/'+roomCode+'/nextRoundRequest'),sbNextRoundListener);sbNextRoundListener=null;}
-    }
+    let advancingFromScoreboard=false;
 
     async function advanceFromScoreboard(isLast,round){
+      if(advancingFromScoreboard)return;
+      advancingFromScoreboard=true;
       console.log('[BORED] advanceFromScoreboard called with round=',round,'isLast=',isLast,'-> writing currentRound=',round+1);
-      clearSbNextRoundListener();
-      if(isLast){ showFinalResults(); }
-      else{
-        await update(roomRef,{currentRound:round+1,status:'lobby',game:null,nextRoundRequest:null});
-        const s=await get(roomRef);roomSnapshot=s.val();
-        console.log('[BORED] after advance, roomSnapshot.currentRound=',roomSnapshot.currentRound);
-        showScreen('screen-lobby');
-        renderLobby();
-      }
+      try{
+        if(isLast){ showFinalResults(); }
+        else{
+          await update(roomRef,{currentRound:round+1,status:'lobby',game:null,nextRoundRequest:null});
+          const s=await get(roomRef);roomSnapshot=s.val();
+          console.log('[BORED] after advance, roomSnapshot.currentRound=',roomSnapshot.currentRound);
+          showScreen('screen-lobby');
+          renderLobby();
+        }
+      } finally { advancingFromScoreboard=false; }
     }
 
     /* ══════════════════════════════════════
@@ -2338,7 +2347,7 @@
       document.getElementById('final-again-btn').onclick=async()=>{
         // Reset scores and round, go back to lobby
         playedGamesThisMatch=[];
-        const updates={currentRound:1,status:'lobby',game:null};
+        const updates={currentRound:1,status:'lobby',game:null,nextRoundRequest:null};
         const players2=roomSnapshot.players||{};
         Object.keys(players2).forEach(k=>{updates[`players/${k}/score`]=0;});
         await update(roomRef,updates);
@@ -2375,8 +2384,7 @@
     async function goToMenu(){
       clearAllGameTimers();
       detachGameListener();
-      clearLobbyStartListener();
-      clearSbNextRoundListener();
+      detachNextRoundRequestListener();
       playedGamesThisMatch=[];
       if(roomRef) await remove(roomRef).catch(()=>{});
       roomCode=null;roomRef=null;roomSnapshot=null;
